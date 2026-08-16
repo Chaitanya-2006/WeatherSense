@@ -228,7 +228,7 @@ function renderWeather(w, forecast, aqi) {
     $('weather-condition').textContent = w.weather[0].main;
     $('low-temp').textContent = Math.round(w.main.temp_min);
     $('high-temp').textContent = Math.round(w.main.temp_max);
-    $('wind-dir').textContent = windDir(w.wind.deg);
+    $('wind-dir').textContent = (w.wind.deg != null) ? windDir(w.wind.deg) : 'Calm';
     const spd = units === 'metric' ? (w.wind.speed * 3.6).toFixed(1) + 'km/h' : w.wind.speed.toFixed(1) + 'mph';
     $('wind-speed').textContent = spd;
     $('humidity-main').textContent = w.main.humidity;
@@ -271,6 +271,7 @@ function renderWeather(w, forecast, aqi) {
     }).join('');
 
     // AQI
+    try {
     if (aqi?.list?.[0]) {
         const a = aqi.list[0];
         const info = aqiInfo(a.main.aqi);
@@ -282,19 +283,29 @@ function renderWeather(w, forecast, aqi) {
         $('aqi-marker').style.left = Math.min(a.main.aqi / 5 * 100, 100) + '%';
         const comps = [['NO₂', a.components.no2], ['O₃', a.components.o3], ['PM10', a.components.pm10], ['PM2.5', a.components.pm2_5], ['CO', Math.round(a.components.co / 100)], ['SO₂', a.components.so2]];
         $('aqi-components').innerHTML = comps.map(([l, v]) => `<div class="aqi-comp-item"><div class="aqi-comp-label">${l}</div><div class="aqi-comp-value">${Math.round(v)}</div></div>`).join('');
+    } else {
+        $('aqi-label').textContent = 'Unavailable';
+        $('aqi-number').textContent = '--';
+        $('aqi-face').textContent = '❓';
     }
+    } catch (e) { console.warn('AQI render error:', e); }
 
     // Pressure gauge
+    try {
     $('pressure-value').textContent = w.main.pressure;
     const pNorm = Math.max(0, Math.min(1, (w.main.pressure - 960) / 80));
     const arcLen = pNorm * 251;
     $('pressure-arc').setAttribute('stroke-dasharray', `${arcLen} 251`);
+    } catch (e) { console.warn('Pressure render error:', e); }
 
     // Wind compass
+    try {
     $('wind-speed-compass').textContent = (w.wind.speed * 3.6).toFixed(1);
-    $('wind-needle').setAttribute('transform', `rotate(${w.wind.deg}, 100, 100)`);
+    $('wind-needle').setAttribute('transform', `rotate(${w.wind.deg || 0}, 100, 100)`);
+    } catch (e) { console.warn('Wind compass render error:', e); }
 
     // UV (estimate from weather)
+    try {
     const uvEst = w.clouds.all < 20 ? 6 : w.clouds.all < 50 ? 4 : w.clouds.all < 80 ? 2 : 1;
     const now = new Date();
     const hour = now.getHours();
@@ -305,11 +316,15 @@ function renderWeather(w, forecast, aqi) {
     $('uv-label').style.color = uv.c;
     $('uv-advice').textContent = uv.a;
     $('uv-marker').style.left = Math.min(uvVal / 11 * 100, 100) + '%';
+    } catch (e) { console.warn('UV render error:', e); }
 
     // Visibility
-    const visKm = (w.visibility / 1000).toFixed(1);
+    const visKm = w.visibility != null ? (w.visibility / 1000).toFixed(1) : '—';
     $('visibility-value').textContent = visKm;
-    $('visibility-desc').textContent = w.visibility >= 10000 ? 'Good visibility and clear field of vision' : w.visibility >= 5000 ? 'Moderate visibility' : 'Low visibility';
+    $('visibility-desc').textContent = w.visibility == null
+        ? 'Visibility data unavailable'
+        : w.visibility >= 10000 ? 'Good visibility and clear field of vision'
+        : w.visibility >= 5000 ? 'Moderate visibility' : 'Low visibility';
 
     // Precip & Humidity
     const rain = w.rain ? (w.rain['1h'] || w.rain['3h'] || 0) : 0;
@@ -321,6 +336,7 @@ function renderWeather(w, forecast, aqi) {
     $('humidity-desc').textContent = w.main.humidity < 30 ? 'Air is dry. Stay hydrated.' : w.main.humidity < 60 ? 'Comfortable humidity.' : 'Feels humid and sticky.';
 
     // Sun & Moon
+    try {
     $('sunrise-label').textContent = fmtTime(w.sys.sunrise, tz);
     $('sunset-label').textContent = fmtTime(w.sys.sunset, tz);
     const daylight = w.sys.sunset - w.sys.sunrise;
@@ -342,6 +358,7 @@ function renderWeather(w, forecast, aqi) {
     $('moon-icon').textContent = mp.icon;
     $('moon-phase').textContent = mp.name;
     $('moon-times').textContent = `Daylight: ${dlH}h ${dlM}min`;
+    } catch (e) { console.warn('Sun/Moon render error:', e); }
 
     // Chart
     renderChart(forecast, tz);
@@ -590,12 +607,17 @@ function initEvents() {
             inlineBtn.querySelector('.inline-loc-text').textContent = 'Detecting...';
         }
         
-        const geoFallback = () => {
+        const geoFallback = (err) => {
             if (geoResolved) return;
             geoResolved = true;
             if (isInlineRetry && inlineBtn) {
                 inlineBtn.disabled = false;
-                inlineBtn.querySelector('.inline-loc-text').textContent = 'Failed. Try again?';
+                if (err && err.code === 1 /* PERMISSION_DENIED */) {
+                    inlineBtn.querySelector('.inline-loc-text').textContent = 'Enable in browser settings';
+                    showToast('📍 Location permission blocked. Enable it from your browser\'s site settings, then tap again.');
+                } else {
+                    inlineBtn.querySelector('.inline-loc-text').textContent = 'Failed. Try again?';
+                }
             } else if (!isInlineRetry) {
                 showToast('📍 Could not detect location. Enable location services or search manually.');
             }
@@ -615,7 +637,7 @@ function initEvents() {
             geoFallback,
             geoOptions
         );
-        setTimeout(geoFallback, 8500);
+        setTimeout(() => geoFallback(null), 8500);
     };
 
     $('location-btn').addEventListener('click', () => handleGeoRequest(false));
@@ -664,6 +686,23 @@ function closeSidebar() { $('favorites-sidebar').classList.remove('show'); setTi
 document.addEventListener('DOMContentLoaded', () => {
     initBg();
     initEvents();
+
+    // Proactively check permission state via Permissions API
+    if (navigator.permissions) {
+        navigator.permissions.query({ name: 'geolocation' }).then(result => {
+            const inlineBtn = $('inline-location-btn');
+            if (result.state === 'denied' && inlineBtn) {
+                inlineBtn.classList.remove('hidden');
+                inlineBtn.querySelector('.inline-loc-text').textContent = 'Enable in browser settings';
+            }
+            result.addEventListener('change', () => {
+                if (result.state === 'granted' && inlineBtn) {
+                    inlineBtn.classList.add('hidden');
+                }
+            });
+        }).catch(() => {});
+    }
+
     // Try geolocation first, fallback to default city
     if (navigator.geolocation) {
         let geoResolved = false;
@@ -673,7 +712,11 @@ document.addEventListener('DOMContentLoaded', () => {
             geoResolved = true;
             if ($('inline-location-btn')) {
                 $('inline-location-btn').classList.remove('hidden');
-                $('inline-location-btn').querySelector('.inline-loc-text').textContent = 'Turn on location';
+                // Don't override label if Permissions API already set it to 'Enable in browser settings'
+                const currentText = $('inline-location-btn').querySelector('.inline-loc-text').textContent;
+                if (currentText !== 'Enable in browser settings') {
+                    $('inline-location-btn').querySelector('.inline-loc-text').textContent = 'Turn on location';
+                }
             }
             searchCity('Mumbai');
         };

@@ -444,7 +444,7 @@ input { font-family: inherit; }
 /* ===== TOAST NOTIFICATIONS ===== */
 .toast-container {
     position: fixed;
-    top: 16px;
+    top: max(16px, env(safe-area-inset-top, 0px) + 12px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 2000;
