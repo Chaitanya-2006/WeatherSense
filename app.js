@@ -1,6 +1,4 @@
-// ⚠️ SECURITY: API key is exposed client-side. Restrict by HTTP referrer in your OpenWeatherMap dashboard.
-// See README.md for details.
-// API key is no longer here — it lives server-side in /api/weather.js (Vercel env var OWM_API_KEY).
+// API key and BASE url have been moved server-side to /api/weather.js for security.
 let units = 'metric';
 let currentLat, currentLon, currentCity;
 let favorites = JSON.parse(localStorage.getItem('favs') || '[]');
@@ -28,48 +26,6 @@ const customLocations = {
     'dharashiv': { lat: 18.1860, lon: 76.0420, name: 'Dharashiv' },
     'osmanabad': { lat: 18.1860, lon: 76.0420, name: 'Dharashiv' },
 
-    // Ahilyanagar District - Small towns & villages
-    'mohoj': { lat: 19.2200, lon: 75.1300, name: 'Mohoj' },
-    'mohoj bk': { lat: 19.2200, lon: 75.1300, name: 'Mohoj Bk' },
-    'tisgaon': { lat: 19.2500, lon: 75.2500, name: 'Tisgaon' },
-    'tisgoan': { lat: 19.2500, lon: 75.2500, name: 'Tisgaon' },
-    'pimplegaon': { lat: 19.2300, lon: 75.1800, name: 'Pimplegaon' },
-    'pimple gaon': { lat: 19.2300, lon: 75.1800, name: 'Pimplegaon' },
-    'pimpalgaon': { lat: 19.2300, lon: 75.1800, name: 'Pimplegaon' },
-    'pathardi': { lat: 19.1600, lon: 75.1200, name: 'Pathardi' },
-    'shrigonda': { lat: 18.6150, lon: 74.6980, name: 'Shrigonda' },
-    'karjat': { lat: 18.9100, lon: 75.0000, name: 'Karjat' },
-    'jamkhed': { lat: 18.7200, lon: 75.3200, name: 'Jamkhed' },
-    'parner': { lat: 19.0000, lon: 74.4400, name: 'Parner' },
-    'nagar': { lat: 19.0948, lon: 74.7480, name: 'Ahilyanagar' },
-    'shevgaon': { lat: 19.3500, lon: 75.7100, name: 'Shevgaon' },
-    'rahuri': { lat: 19.3900, lon: 74.6500, name: 'Rahuri' },
-    'kopargaon': { lat: 19.8800, lon: 74.4800, name: 'Kopargaon' },
-    'sangamner': { lat: 19.5700, lon: 74.2100, name: 'Sangamner' },
-    'akole': { lat: 19.5300, lon: 73.8900, name: 'Akole' },
-    'newasa': { lat: 19.5500, lon: 75.0200, name: 'Newasa' },
-    'rahata': { lat: 19.7100, lon: 74.4800, name: 'Rahata' },
-    'shirdi': { lat: 19.7645, lon: 74.4770, name: 'Shirdi' },
-
-    // Villages near Pathardi/Mohoj area
-    'kadgaon': { lat: 19.2000, lon: 75.0800, name: 'Kadgaon' },
-    'dharwadi': { lat: 19.2100, lon: 75.0500, name: 'Dharwadi' },
-    'ragholvire': { lat: 19.2200, lon: 75.0900, name: 'Ragholvire' },
-    'chichondi': { lat: 19.2400, lon: 75.0300, name: 'Chichondi' },
-    'shiral': { lat: 19.2500, lon: 74.9700, name: 'Shiral' },
-    'gitewadi': { lat: 19.2100, lon: 75.0200, name: 'Gitewadi' },
-    'kolhar': { lat: 19.2000, lon: 74.9800, name: 'Kolhar' },
-    'mandave': { lat: 19.2300, lon: 75.1500, name: 'Mandave' },
-    'joharwadi': { lat: 19.2400, lon: 75.1800, name: 'Joharwadi' },
-    'lohsar': { lat: 19.2300, lon: 75.1600, name: 'Lohsar' },
-    'shingave': { lat: 19.2600, lon: 75.0600, name: 'Shingave' },
-    'deorai': { lat: 19.2100, lon: 75.2200, name: 'Deorai' },
-    'shirpur': { lat: 19.2200, lon: 75.2700, name: 'Shirpur' },
-    'nivdunge': { lat: 19.2400, lon: 75.3200, name: 'Nivdunge' },
-    'kasar pimpalgaon': { lat: 19.2600, lon: 75.2500, name: 'Kasar Pimpalgaon' },
-    'renukaiwadi': { lat: 19.2500, lon: 75.0700, name: 'Renukaiwadi' },
-    'karanji': { lat: 19.1900, lon: 75.2000, name: 'Karanji' },
-    'ghatshiras': { lat: 19.1800, lon: 75.2500, name: 'Ghatshiras' },
 
     // Major Maharashtra cities
     'mumbai': { lat: 19.0760, lon: 72.8777, name: 'Mumbai' },
@@ -112,61 +68,64 @@ const $ = id => document.getElementById(id);
 // ===== API =====
 async function fetchJSON(url) {
     const r = await fetch(url);
-    if (!r.ok) throw new Error(r.statusText);
+    if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error || r.statusText);
+    }
     return r.json();
 }
-const apiWeather = (lat,lon) => fetchJSON(`/api/weather?type=current&lat=${lat}&lon=${lon}&units=${units}`);
-const apiForecast = (lat,lon) => fetchJSON(`/api/weather?type=forecast&lat=${lat}&lon=${lon}&units=${units}`);
-const apiAQI = (lat,lon) => fetchJSON(`/api/weather?type=aqi&lat=${lat}&lon=${lon}`);
+const apiWeather = (lat, lon) => fetchJSON(`/api/weather?type=current&lat=${lat}&lon=${lon}&units=${units}`);
+const apiForecast = (lat, lon) => fetchJSON(`/api/weather?type=forecast&lat=${lat}&lon=${lon}&units=${units}`);
+const apiAQI = (lat, lon) => fetchJSON(`/api/weather?type=aqi&lat=${lat}&lon=${lon}`);
 const apiGeo = (city) => fetchJSON(`/api/weather?type=geo&q=${encodeURIComponent(city)}`);
-const iconUrl = (c,s=2) => `https://openweathermap.org/img/wn/${c}@${s}x.png`;
+const iconUrl = (c, s = 2) => `https://openweathermap.org/img/wn/${c}@${s}x.png`;
 
 // ===== UTILS =====
 function fmtTime(ts, tz) {
-    return new Date((ts+tz)*1000).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:'UTC'});
+    return new Date((ts + tz) * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' });
 }
 function fmtHour(ts, tz) {
-    return new Date((ts+tz)*1000).toLocaleTimeString('en-US',{hour:'numeric',hour12:true,timeZone:'UTC'});
+    return new Date((ts + tz) * 1000).toLocaleTimeString('en-US', { hour: 'numeric', hour12: true, timeZone: 'UTC' });
 }
 function fmtDay(ts, tz) {
-    const d=new Date((ts+tz)*1000);
-    const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    return {day:days[d.getUTCDay()],date:`${d.getUTCMonth()+1}/${d.getUTCDate()}`};
+    const d = new Date((ts + tz) * 1000);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return { day: days[d.getUTCDay()], date: `${d.getUTCMonth() + 1}/${d.getUTCDate()}` };
 }
 function windDir(deg) {
-    const d=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
-    return d[Math.round(deg/22.5)%16];
+    const d = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    return d[Math.round(deg / 22.5) % 16];
 }
 function aqiInfo(v) {
-    const m=[{l:'Good',f:'😊',c:'#22c55e'},{l:'Fair',f:'🙂',c:'#eab308'},{l:'Moderate',f:'😐',c:'#f97316'},{l:'Poor',f:'😷',c:'#ef4444'},{l:'Very Poor',f:'🤢',c:'#7c3aed'}];
-    return m[Math.min(v-1,4)]||m[0];
+    const m = [{ l: 'Good', f: '😊', c: '#22c55e' }, { l: 'Fair', f: '🙂', c: '#eab308' }, { l: 'Moderate', f: '😐', c: '#f97316' }, { l: 'Poor', f: '😷', c: '#ef4444' }, { l: 'Very Poor', f: '🤢', c: '#7c3aed' }];
+    return m[Math.min(v - 1, 4)] || m[0];
 }
 function uvInfo(v) {
-    if(v<=2) return {l:'Low',c:'#22c55e',a:'No protection needed'};
-    if(v<=5) return {l:'Moderate',c:'#eab308',a:'Wear sunscreen after 10 AM'};
-    if(v<=7) return {l:'High',c:'#f97316',a:'Reduce sun exposure 10AM-4PM'};
-    if(v<=10) return {l:'Very High',c:'#ef4444',a:'Avoid sun exposure'};
-    return {l:'Extreme',c:'#7c3aed',a:'Stay indoors if possible'};
+    if (v <= 2) return { l: 'Low', c: '#22c55e', a: 'No protection needed' };
+    if (v <= 5) return { l: 'Moderate', c: '#eab308', a: 'Wear sunscreen after 10 AM' };
+    if (v <= 7) return { l: 'High', c: '#f97316', a: 'Reduce sun exposure 10AM-4PM' };
+    if (v <= 10) return { l: 'Very High', c: '#ef4444', a: 'Avoid sun exposure' };
+    return { l: 'Extreme', c: '#7c3aed', a: 'Stay indoors if possible' };
 }
 function moonPhase() {
-    const d=new Date(),jd=Math.floor(365.25*(d.getFullYear()+4716))+Math.floor(30.6001*(d.getMonth()+1+1))+d.getDate()-1524.5;
-    let p=((jd-2451550.1)/29.530588853)%1; if(p<0)p+=1;
-    const icons=['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'];
-    const names=['New Moon','Waxing Crescent','First Quarter','Waxing Gibbous','Full Moon','Waning Gibbous','Last Quarter','Waning Crescent'];
-    const i=Math.floor(p*8)%8;
-    return {icon:icons[i],name:names[i]};
+    const d = new Date(), jd = Math.floor(365.25 * (d.getFullYear() + 4716)) + Math.floor(30.6001 * (d.getMonth() + 1 + 1)) + d.getDate() - 1524.5;
+    let p = ((jd - 2451550.1) / 29.530588853) % 1; if (p < 0) p += 1;
+    const icons = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
+    const names = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
+    const i = Math.floor(p * 8) % 8;
+    return { icon: icons[i], name: names[i] };
 }
 
 // ===== BACKGROUND ANIMATION =====
 function initBg() {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) return;
-    const c=$('weather-bg-canvas'), ctx=c.getContext('2d');
-    let stars=[], w, h, animFrameId, resizeTimer;
+    const c = $('weather-bg-canvas'), ctx = c.getContext('2d');
+    let stars = [], w, h, animFrameId, resizeTimer;
     let isVisible = !document.hidden;
     function resizeNow() {
-        w=c.width=innerWidth; h=c.height=innerHeight;
-        stars=Array.from({length:150},()=>({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.5+0.3,a:Math.random(),da:(Math.random()-0.5)*0.012}));
+        w = c.width = innerWidth; h = c.height = innerHeight;
+        stars = Array.from({ length: 150 }, () => ({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.5 + 0.3, a: Math.random(), da: (Math.random() - 0.5) * 0.012 }));
     }
     function resize() {
         clearTimeout(resizeTimer);
@@ -174,9 +133,9 @@ function initBg() {
     }
     function draw() {
         if (!isVisible) return;
-        ctx.clearRect(0,0,w,h);
-        stars.forEach(s=>{s.a+=s.da;if(s.a>1||s.a<0.1)s.da*=-1;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(200,210,255,${s.a})`;ctx.fill();});
-        animFrameId=requestAnimationFrame(draw);
+        ctx.clearRect(0, 0, w, h);
+        stars.forEach(s => { s.a += s.da; if (s.a > 1 || s.a < 0.1) s.da *= -1; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fillStyle = `rgba(200,210,255,${s.a})`; ctx.fill(); });
+        animFrameId = requestAnimationFrame(draw);
     }
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
@@ -200,11 +159,11 @@ function setWeatherFx(cond, windSpeed) {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     // Remove old effects
-    document.querySelectorAll('.rain-drop,.cloud-layer,.lightning-flash').forEach(e=>e.remove());
+    document.querySelectorAll('.rain-drop,.cloud-layer,.lightning-flash').forEach(e => e.remove());
     if (lightningInterval) { clearInterval(lightningInterval); lightningInterval = null; }
-    
+
     const bgEl = document.getElementById('weather-bg-image');
-    
+
     if (condition === 'clear') {
         bgEl.style.backgroundImage = `url('${weatherBGs.sunny}')`;
     } else if (condition === 'clouds') {
@@ -219,8 +178,8 @@ function setWeatherFx(cond, windSpeed) {
     } else if (condition === 'snow') {
         bgEl.style.backgroundImage = `url('${weatherBGs.snowy}')`;
         if (!prefersReducedMotion) mkSnow();
-    } else if (condition === 'mist' || condition === 'smoke' || condition === 'haze' || 
-               condition === 'dust' || condition === 'fog' || condition === 'sand' || condition === 'ash') {
+    } else if (condition === 'mist' || condition === 'smoke' || condition === 'haze' ||
+        condition === 'dust' || condition === 'fog' || condition === 'sand' || condition === 'ash') {
         bgEl.style.backgroundImage = `url('${weatherBGs.cloudy}')`;
         if (!prefersReducedMotion) mkClouds();
     } else if (condition === 'squall' || condition === 'tornado') {
@@ -245,15 +204,19 @@ function startLightning() {
         }
     }, 3000);
 }
-function mkRain(){for(let i=0;i<50;i++){const d=document.createElement('div');d.className='rain-drop';d.style.cssText=`left:${Math.random()*100}%;height:${Math.random()*18+8}px;animation-duration:${Math.random()*0.4+0.3}s;animation-delay:${Math.random()*2}s;opacity:${Math.random()*0.3+0.1}`;document.body.appendChild(d);}}
-function mkSnow(){for(let i=0;i<40;i++){const d=document.createElement('div');d.className='rain-drop';d.style.cssText=`left:${Math.random()*100}%;width:${Math.random()*5+3}px;height:${Math.random()*5+3}px;border-radius:50%;background:rgba(255,255,255,0.6);animation-duration:${Math.random()*2+2}s;animation-delay:${Math.random()*3}s`;document.body.appendChild(d);}}
-function mkClouds(){for(let i=0;i<4;i++){const d=document.createElement('div');d.className='cloud-layer';d.style.cssText=`top:${Math.random()*30}%;animation-duration:${Math.random()*25+35}s;animation-delay:${Math.random()*15}s;width:${Math.random()*200+200}px`;document.body.appendChild(d);}}
+function mkRain() { for (let i = 0; i < 50; i++) { const d = document.createElement('div'); d.className = 'rain-drop'; d.style.cssText = `left:${Math.random() * 100}%;height:${Math.random() * 18 + 8}px;animation-duration:${Math.random() * 0.4 + 0.3}s;animation-delay:${Math.random() * 2}s;opacity:${Math.random() * 0.3 + 0.1}`; document.body.appendChild(d); } }
+function mkSnow() { for (let i = 0; i < 40; i++) { const d = document.createElement('div'); d.className = 'rain-drop'; d.style.cssText = `left:${Math.random() * 100}%;width:${Math.random() * 5 + 3}px;height:${Math.random() * 5 + 3}px;border-radius:50%;background:rgba(255,255,255,0.6);animation-duration:${Math.random() * 2 + 2}s;animation-delay:${Math.random() * 3}s`; document.body.appendChild(d); } }
+function mkClouds() { for (let i = 0; i < 4; i++) { const d = document.createElement('div'); d.className = 'cloud-layer'; d.style.cssText = `top:${Math.random() * 30}%;animation-duration:${Math.random() * 25 + 35}s;animation-delay:${Math.random() * 15}s;width:${Math.random() * 200 + 200}px`; document.body.appendChild(d); } }
 
 // ===== RENDER =====
 function renderWeather(w, forecast, aqi) {
     const tz = w.timezone;
     const displayName = customCityName || currentCity || w.name;
     $('city-name').textContent = displayName;
+    if ($('inline-location-btn')) {
+        $('inline-location-btn').classList.add('hidden');
+        $('inline-location-btn').querySelector('.inline-loc-text').textContent = 'Turn on location';
+    }
     currentCity = displayName;
     document.title = `${displayName} — WeatherSense Weather`;
     customCityName = null; // Reset after use
@@ -261,19 +224,19 @@ function renderWeather(w, forecast, aqi) {
     // Main card
     $('current-temp-value').textContent = Math.round(w.main.temp);
     $('realfeel-temp').textContent = Math.round(w.main.feels_like);
-    $('temp-unit-label').textContent = units==='metric'?'C':'F';
+    $('temp-unit-label').textContent = units === 'metric' ? 'C' : 'F';
     $('weather-condition').textContent = w.weather[0].main;
     $('low-temp').textContent = Math.round(w.main.temp_min);
     $('high-temp').textContent = Math.round(w.main.temp_max);
     $('wind-dir').textContent = windDir(w.wind.deg);
-    const spd = units==='metric'? (w.wind.speed*3.6).toFixed(1)+'km/h' : w.wind.speed.toFixed(1)+'mph';
+    const spd = units === 'metric' ? (w.wind.speed * 3.6).toFixed(1) + 'km/h' : w.wind.speed.toFixed(1) + 'mph';
     $('wind-speed').textContent = spd;
     $('humidity-main').textContent = w.main.humidity;
-    $('weather-icon-main').innerHTML = `<img src="${iconUrl(w.weather[0].icon,4)}" alt="${w.weather[0].description}">`;
+    $('weather-icon-main').innerHTML = `<img src="${iconUrl(w.weather[0].icon, 4)}" alt="${w.weather[0].description}">`;
 
     // Precipitation message
     const pop = forecast.list[0]?.pop || 0;
-    $('precipitation-msg').textContent = pop < 0.1 ? 'No precipitation for at least 120 min' : `${Math.round(pop*100)}% chance of precipitation`;
+    $('precipitation-msg').textContent = pop < 0.1 ? 'No precipitation for at least 120 min' : `${Math.round(pop * 100)}% chance of precipitation`;
 
     // Weather effects with wind speed
     setWeatherFx(w.weather[0].main, w.wind.speed);
@@ -282,7 +245,7 @@ function renderWeather(w, forecast, aqi) {
     const hrs = forecast.list.slice(0, 8);
     $('hourly-scroll').innerHTML = hrs.map((h, i) => {
         const t = fmtHour(h.dt, tz);
-        return `<div class="hourly-item${i===0?' now':''}"><div class="hourly-time">${i===0?'Now':t}</div><div class="hourly-icon"><img src="${iconUrl(h.weather[0].icon)}" alt=""></div><div class="hourly-temp">${Math.round(h.main.temp)}°</div></div>`;
+        return `<div class="hourly-item${i === 0 ? ' now' : ''}"><div class="hourly-time">${i === 0 ? 'Now' : t}</div><div class="hourly-icon"><img src="${iconUrl(h.weather[0].icon)}" alt=""></div><div class="hourly-temp">${Math.round(h.main.temp)}°</div></div>`;
     }).join('');
 
     // Daily - group forecast by day
@@ -304,7 +267,7 @@ function renderWeather(w, forecast, aqi) {
         const pop = Math.round(Math.max(...d.pops) * 100);
         const midIcon = d.icons[Math.floor(d.icons.length / 2)];
         const cond = d.conditions[Math.floor(d.conditions.length / 2)];
-        return `<div class="daily-item"><div class="daily-date"><span>${d.date}</span><strong>${i===0?'Today':d.day}</strong></div><div class="daily-precip">${pop>0?pop+'%':''}</div><div class="daily-icon"><img src="${iconUrl(midIcon)}" alt=""></div><div class="daily-condition">${cond}</div><div class="daily-temps"><span class="daily-hi">${hi}°</span>/<span class="daily-lo">${lo}°</span></div></div>`;
+        return `<div class="daily-item"><div class="daily-date"><span>${d.date}</span><strong>${i === 0 ? 'Today' : d.day}</strong></div><div class="daily-precip">${pop > 0 ? pop + '%' : ''}</div><div class="daily-icon"><img src="${iconUrl(midIcon)}" alt=""></div><div class="daily-condition">${cond}</div><div class="daily-temps"><span class="daily-hi">${hi}°</span>/<span class="daily-lo">${lo}°</span></div></div>`;
     }).join('');
 
     // AQI
@@ -317,8 +280,8 @@ function renderWeather(w, forecast, aqi) {
         $('aqi-label').style.color = info.c;
         $('aqi-pollutant').textContent = 'Main Pollutant: Particulate Matter 2.5';
         $('aqi-marker').style.left = Math.min(a.main.aqi / 5 * 100, 100) + '%';
-        const comps = [['NO₂', a.components.no2], ['O₃', a.components.o3], ['PM10', a.components.pm10], ['PM2.5', a.components.pm2_5], ['CO', Math.round(a.components.co/100)], ['SO₂', a.components.so2]];
-        $('aqi-components').innerHTML = comps.map(([l,v]) => `<div class="aqi-comp-item"><div class="aqi-comp-label">${l}</div><div class="aqi-comp-value">${Math.round(v)}</div></div>`).join('');
+        const comps = [['NO₂', a.components.no2], ['O₃', a.components.o3], ['PM10', a.components.pm10], ['PM2.5', a.components.pm2_5], ['CO', Math.round(a.components.co / 100)], ['SO₂', a.components.so2]];
+        $('aqi-components').innerHTML = comps.map(([l, v]) => `<div class="aqi-comp-item"><div class="aqi-comp-label">${l}</div><div class="aqi-comp-value">${Math.round(v)}</div></div>`).join('');
     }
 
     // Pressure gauge
@@ -430,7 +393,7 @@ function renderChart(forecast, tz) {
     ctx.beginPath();
     ctx.moveTo(pts[0].x, H - padY);
     pts.forEach(p => ctx.lineTo(p.x, p.y));
-    ctx.lineTo(pts[pts.length-1].x, H - padY);
+    ctx.lineTo(pts[pts.length - 1].x, H - padY);
     ctx.fillStyle = grad;
     ctx.fill();
 
@@ -438,8 +401,8 @@ function renderChart(forecast, tz) {
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) {
-        const xc = (pts[i-1].x + pts[i].x) / 2;
-        ctx.bezierCurveTo(xc, pts[i-1].y, xc, pts[i].y, pts[i].x, pts[i].y);
+        const xc = (pts[i - 1].x + pts[i].x) / 2;
+        ctx.bezierCurveTo(xc, pts[i - 1].y, xc, pts[i].y, pts[i].x, pts[i].y);
     }
     ctx.strokeStyle = '#60a5fa';
     ctx.lineWidth = 2.5;
@@ -484,7 +447,7 @@ async function searchCity(name) {
     hideError();
     try {
         const searchKey = name.toLowerCase().trim();
-        
+
         // Check custom locations database first (for Maharashtra villages & renamed cities)
         if (customLocations[searchKey]) {
             const loc = customLocations[searchKey];
@@ -493,12 +456,12 @@ async function searchCity(name) {
             await loadWeather(loc.lat, loc.lon);
             return;
         }
-        
+
         // Try OpenWeatherMap geocoding API
         const geo = await apiGeo(name);
         if (!geo.length) {
             // Try partial match in custom locations as fallback
-            const partialMatch = Object.keys(customLocations).find(key => 
+            const partialMatch = Object.keys(customLocations).find(key =>
                 key.includes(searchKey) || searchKey.includes(key)
             );
             if (partialMatch) {
@@ -576,7 +539,7 @@ function initEvents() {
     $('search-input').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim()) { searchCity(e.target.value.trim()); e.target.value = ''; $('search-history').classList.add('hidden'); } });
     $('search-input').addEventListener('focus', () => { renderHistory(); if (history.length) $('search-history').classList.remove('hidden'); });
     $('search-input').addEventListener('blur', () => { setTimeout(() => { $('search-history').classList.add('hidden'); $('search-suggestions').classList.add('hidden'); }, 250); });
-    
+
     // Live search suggestions from custom locations
     $('search-input').addEventListener('input', (e) => {
         const val = e.target.value.toLowerCase().trim();
@@ -590,12 +553,12 @@ function initEvents() {
         // Remove duplicates by name
         const unique = [...new Map(matches.map(m => [m.name, m])).values()];
         if (unique.length === 0) { sugBox.classList.add('hidden'); return; }
-        sugBox.innerHTML = unique.map(loc => 
+        sugBox.innerHTML = unique.map(loc =>
             `<div class="suggestion-item" data-lat="${loc.lat}" data-lon="${loc.lon}" data-name="${loc.name}">📍 ${loc.name}</div>`
         ).join('');
         sugBox.classList.remove('hidden');
     });
-    
+
     // Suggestion clicks
     $('search-suggestions').addEventListener('click', e => {
         const item = e.target.closest('.suggestion-item');
@@ -612,32 +575,53 @@ function initEvents() {
     $('history-list').addEventListener('click', e => { const item = e.target.closest('.history-item'); if (item) { searchCity(item.dataset.city); $('search-input').value = ''; } });
     $('clear-history-btn').addEventListener('click', () => { history = []; localStorage.setItem('hist', '[]'); $('search-history').classList.add('hidden'); });
 
-    // Location
-    $('location-btn').addEventListener('click', () => {
-        if (navigator.geolocation) {
-            let geoResolved = false;
-            const geoOptions = { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 };
-            const geoFallback = () => {
+    // Location buttons
+    const handleGeoRequest = (isInlineRetry = false) => {
+        if (!navigator.geolocation) {
+            showToast('📍 Geolocation is not supported by your browser.');
+            return;
+        }
+        let geoResolved = false;
+        const geoOptions = { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 };
+        const inlineBtn = $('inline-location-btn');
+        
+        if (isInlineRetry && inlineBtn) {
+            inlineBtn.disabled = true;
+            inlineBtn.querySelector('.inline-loc-text').textContent = 'Detecting...';
+        }
+        
+        const geoFallback = () => {
+            if (geoResolved) return;
+            geoResolved = true;
+            if (isInlineRetry && inlineBtn) {
+                inlineBtn.disabled = false;
+                inlineBtn.querySelector('.inline-loc-text').textContent = 'Failed. Try again?';
+            } else if (!isInlineRetry) {
+                showToast('📍 Could not detect location. Enable location services or search manually.');
+            }
+        };
+        
+        navigator.geolocation.getCurrentPosition(
+            pos => {
                 if (geoResolved) return;
                 geoResolved = true;
-                showToast('📍 Could not detect location. Enable location services or search manually.');
-            };
-            navigator.geolocation.getCurrentPosition(
-                pos => {
-                    if (geoResolved) return;
-                    geoResolved = true;
-                    customCityName = null;
-                    currentCity = null;
-                    loadWeather(pos.coords.latitude, pos.coords.longitude);
-                },
-                geoFallback,
-                geoOptions
-            );
-            setTimeout(geoFallback, 8500);
-        } else {
-            showToast('📍 Geolocation is not supported by your browser.');
-        }
-    });
+                if (isInlineRetry && inlineBtn) {
+                    inlineBtn.disabled = false;
+                }
+                customCityName = null;
+                currentCity = null;
+                loadWeather(pos.coords.latitude, pos.coords.longitude);
+            },
+            geoFallback,
+            geoOptions
+        );
+        setTimeout(geoFallback, 8500);
+    };
+
+    $('location-btn').addEventListener('click', () => handleGeoRequest(false));
+    if ($('inline-location-btn')) {
+        $('inline-location-btn').addEventListener('click', () => handleGeoRequest(true));
+    }
 
     // Unit toggle
     $('unit-toggle').addEventListener('click', () => {
@@ -687,7 +671,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const geoFallback = () => {
             if (geoResolved) return;
             geoResolved = true;
-            showToast('📍 Location unavailable — showing Mumbai weather');
+            if ($('inline-location-btn')) {
+                $('inline-location-btn').classList.remove('hidden');
+                $('inline-location-btn').querySelector('.inline-loc-text').textContent = 'Turn on location';
+            }
             searchCity('Mumbai');
         };
         navigator.geolocation.getCurrentPosition(
@@ -704,7 +691,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Safety net: if neither callback fires within 8.5s
         setTimeout(geoFallback, 8500);
     } else {
-        showToast('📍 Location not supported — showing Mumbai weather');
         searchCity('Mumbai');
     }
 });

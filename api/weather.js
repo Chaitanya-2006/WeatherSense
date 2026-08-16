@@ -1,52 +1,52 @@
-// Vercel Serverless Function — proxies all OpenWeatherMap calls.
-// The API key lives ONLY here (server-side), read from the OWM_API_KEY
-// environment variable. It is never sent to the browser.
-//
-// Frontend calls this as: /api/weather?type=current&lat=..&lon=..&units=metric
-//                          /api/weather?type=forecast&lat=..&lon=..&units=metric
-//                          /api/weather?type=aqi&lat=..&lon=..
-//                          /api/weather?type=geo&q=CityName
-
-const BASE = 'https://api.openweathermap.org';
-
 export default async function handler(req, res) {
-  const API_KEY = process.env.OWM_API_KEY;
-
-  if (!API_KEY) {
-    return res.status(500).json({ error: 'Server misconfigured: OWM_API_KEY is not set in Vercel Environment Variables.' });
+  const apiKey = process.env.OPENWEATHERMAP_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: "OPENWEATHERMAP_API_KEY environment variable is missing" });
   }
 
-  const { type, lat, lon, units = 'metric', q } = req.query;
+  const { type, lat, lon, units, q } = req.query;
 
-  let url;
+  if (!type) {
+    return res.status(400).json({ error: "Missing 'type' query parameter" });
+  }
+
+  const BASE = 'https://api.openweathermap.org';
+  let url = '';
+
   switch (type) {
     case 'current':
-      if (!lat || !lon) return res.status(400).json({ error: 'lat and lon are required' });
-      url = `${BASE}/data/2.5/weather?lat=${lat}&lon=${lon}&units=${units}&appid=${API_KEY}`;
+      if (!lat || !lon) return res.status(400).json({ error: "Missing lat/lon for current weather" });
+      url = `${BASE}/data/2.5/weather?lat=${lat}&lon=${lon}&units=${units || 'metric'}&appid=${apiKey}`;
       break;
     case 'forecast':
-      if (!lat || !lon) return res.status(400).json({ error: 'lat and lon are required' });
-      url = `${BASE}/data/2.5/forecast?lat=${lat}&lon=${lon}&units=${units}&appid=${API_KEY}`;
+      if (!lat || !lon) return res.status(400).json({ error: "Missing lat/lon for forecast" });
+      url = `${BASE}/data/2.5/forecast?lat=${lat}&lon=${lon}&units=${units || 'metric'}&appid=${apiKey}`;
       break;
     case 'aqi':
-      if (!lat || !lon) return res.status(400).json({ error: 'lat and lon are required' });
-      url = `${BASE}/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${API_KEY}`;
+      if (!lat || !lon) return res.status(400).json({ error: "Missing lat/lon for aqi" });
+      url = `${BASE}/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${apiKey}`;
       break;
     case 'geo':
-      if (!q) return res.status(400).json({ error: 'q (city name) is required' });
-      url = `${BASE}/geo/1.0/direct?q=${encodeURIComponent(q)}&limit=5&appid=${API_KEY}`;
+      if (!q) return res.status(400).json({ error: "Missing 'q' for geo" });
+      url = `${BASE}/geo/1.0/direct?q=${encodeURIComponent(q)}&limit=5&appid=${apiKey}`;
       break;
     default:
-      return res.status(400).json({ error: 'Invalid or missing type. Use current, forecast, aqi, or geo.' });
+      return res.status(400).json({ error: "Invalid type parameter" });
   }
 
   try {
-    const r = await fetch(url);
-    const data = await r.json();
-    // Cache at the edge/CDN for 5 minutes to cut down on repeat OpenWeatherMap calls
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    // Add CDN caching to reduce upstream calls
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
-    return res.status(r.status).json(data);
-  } catch (e) {
-    return res.status(502).json({ error: 'Upstream weather service failed.' });
+    
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+    
+    return res.status(200).json(data);
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to fetch data from OpenWeatherMap" });
   }
 }
