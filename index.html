@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WeatherSense - Premium real-time weather forecast with stunning visuals">
+    <meta name="theme-color" content="#0a0a1a">
+    <title>WeatherSense</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤</text></svg>">
+</head>
+<body>
+    <!-- Animated Background -->
+    <div id="weather-bg-image" class="weather-bg-image"></div>
+    <canvas id="weather-bg-canvas"></canvas>
+    <div id="weather-overlay"></div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <div class="loading-icon">
+                <svg viewBox="0 0 100 100" class="loading-sun">
+                    <circle cx="50" cy="50" r="20" fill="#fbbf24"/>
+                    <g class="sun-rays">
+                        <line x1="50" y1="5" x2="50" y2="20" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                        <line x1="50" y1="80" x2="50" y2="95" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                        <line x1="5" y1="50" x2="20" y2="50" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                        <line x1="80" y1="50" x2="95" y2="50" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                        <line x1="18" y1="18" x2="29" y2="29" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                        <line x1="71" y1="71" x2="82" y2="82" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                        <line x1="82" y1="18" x2="71" y2="29" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                        <line x1="29" y1="71" x2="18" y2="82" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+                    </g>
+                </svg>
+            </div>
+            <h2 class="loading-title">WeatherSense</h2>
+            <p class="loading-subtitle">Fetching your weather...</p>
+            <div class="loading-bar">
+                <div class="loading-bar-fill"></div>
+            </div>
+            <p class="loading-credit">Created by <strong>Chaitanya Kokate</strong></p>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" class="app hidden">
+        <!-- Header -->
+        <header id="app-header" class="app-header">
+            <div class="header-left">
+                <button id="menu-btn" class="icon-btn" aria-label="Menu">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
+                <h1 id="city-name" class="city-name">Loading...</h1>
+            </div>
+            <div class="header-right">
+                <button id="unit-toggle" class="unit-toggle" aria-label="Toggle temperature unit">°C</button>
+            </div>
+        </header>
+
+        <!-- Search Bar -->
+        <div id="search-container" class="search-container">
+            <div class="search-input-wrap">
+                <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" class="search-input" placeholder="Search city..." autocomplete="off" aria-label="Search for a city">
+                <button id="voice-btn" class="icon-btn voice-btn" aria-label="Voice search" title="Voice search">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                </button>
+                <button id="location-btn" class="icon-btn" aria-label="Use my location" title="Detect my location">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+                </button>
+            </div>
+            <div id="search-suggestions" class="search-suggestions hidden"></div>
+            <div id="search-history" class="search-history hidden">
+                <div class="history-header">
+                    <span>Recent Searches</span>
+                    <button id="clear-history-btn" class="clear-btn">Clear</button>
+                </div>
+                <div id="history-list" class="history-list"></div>
+            </div>
+        </div>
+
+        <!-- Favorites Sidebar -->
+        <div id="favorites-overlay" class="favorites-overlay hidden"></div>
+        <aside id="favorites-sidebar" class="favorites-sidebar hidden">
+            <div class="sidebar-header">
+                <h2>Favorite Cities</h2>
+                <button id="close-sidebar" class="icon-btn">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div id="favorites-list" class="favorites-list">
+                <p class="empty-msg">No favorite cities yet.<br>Tap the ♥ to add one!</p>
+            </div>
+        </aside>
+
+        <!-- Error Message -->
+        <div id="error-container" class="error-container hidden">
+            <div class="error-card glass-card">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                <h3 id="error-title">City Not Found</h3>
+                <p id="error-msg">Please check the city name and try again.</p>
+                <button id="error-dismiss" class="btn-primary">Try Again</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main id="main-content" class="main-content">
+            <!-- Main Weather Card -->
+            <section id="main-weather-card" class="main-weather-card">
+                <div class="glass-orb">
+                    <div class="orb-inner">
+                        <div class="realfeel-label">RealFeel® <span id="realfeel-temp">--</span>°</div>
+                        <div class="current-temp">
+                            <span id="current-temp-value">--</span><span class="temp-unit-display">°<span id="temp-unit-label">C</span></span>
+                        </div>
+                        <div class="condition-row">
+                            <span class="low-temp">🔽 <span id="low-temp">--</span>°</span>
+                            <span id="weather-condition" class="weather-condition">--</span>
+                            <span class="high-temp"><span id="high-temp">--</span>° 🔼</span>
+                        </div>
+                        <div class="weather-meta-row">
+                            <span class="meta-item">🧭 <span id="wind-dir">--</span></span>
+                            <span class="meta-item">💨 <span id="wind-speed">--</span></span>
+                            <span class="meta-item">💧 <span id="humidity-main">--</span>%</span>
+                        </div>
+                    </div>
+                    <div class="orb-icon-wrap">
+                        <div id="weather-icon-main" class="weather-icon-main"></div>
+                    </div>
+                </div>
+                <p id="precipitation-msg" class="precipitation-msg">Checking precipitation...</p>
+            </section>
+
+            <!-- Hourly Forecast -->
+            <section class="section-card glass-card">
+                <div class="section-header">
+                    <span class="section-title">🕐 Hourly Forecast</span>
+                </div>
+                <div id="hourly-scroll" class="hourly-scroll">
+                    <!-- Filled by JS -->
+                </div>
+            </section>
+
+            <!-- Daily Forecast -->
+            <section class="section-card glass-card">
+                <div class="section-header">
+                    <span class="section-title">📅 Daily Forecast</span>
+                </div>
+                <p id="daily-summary" class="daily-summary"></p>
+                <div id="daily-list" class="daily-list">
+                    <!-- Filled by JS -->
+                </div>
+            </section>
+
+            <!-- Air Quality -->
+            <section class="section-card glass-card">
+                <div class="section-header">
+                    <span class="section-title">🏭 Air Quality</span>
+                    <button class="info-btn" title="About Air Quality Index">ⓘ</button>
+                </div>
+                <div class="aqi-main">
+                    <div id="aqi-face" class="aqi-face">😊</div>
+                    <div class="aqi-info">
+                        <span class="aqi-value"><span id="aqi-number">--</span></span>
+                        <span id="aqi-label" class="aqi-label">--</span>
+                        <span id="aqi-pollutant" class="aqi-pollutant">Main Pollutant: --</span>
+                    </div>
+                </div>
+                <div id="aqi-bar" class="aqi-bar">
+                    <div class="aqi-gradient-bar">
+                        <div id="aqi-marker" class="aqi-marker"></div>
+                    </div>
+                </div>
+                <div id="aqi-components" class="aqi-components">
+                    <!-- Filled by JS -->
+                </div>
+            </section>
+
+            <!-- Weather Details Grid -->
+            <div class="details-grid">
+                <!-- Pressure -->
+                <section class="detail-card glass-card">
+                    <div class="detail-label">📊 PRESSURE</div>
+                    <div class="gauge-container">
+                        <svg id="pressure-gauge" viewBox="0 0 200 120" class="gauge-svg">
+                            <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="8" stroke-linecap="round"/>
+                            <path id="pressure-arc" d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="url(#pressureGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="0 251"/>
+                            <defs><linearGradient id="pressureGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient></defs>
+                            <text x="100" y="75" text-anchor="middle" fill="white" font-size="10" class="gauge-arrow">↓</text>
+                            <text id="pressure-value" x="100" y="95" text-anchor="middle" fill="white" font-size="22" font-weight="700" font-family="Outfit">--</text>
+                            <text x="100" y="112" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter">mbar</text>
+                            <text x="25" y="118" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Low</text>
+                            <text x="175" y="118" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">High</text>
+                        </svg>
+                    </div>
+                </section>
+
+                <!-- Wind -->
+                <section class="detail-card glass-card">
+                    <div class="detail-label">💨 WIND</div>
+                    <div class="compass-container">
+                        <svg id="wind-compass" viewBox="0 0 200 200" class="compass-svg">
+                            <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+                            <circle cx="100" cy="100" r="60" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+                            <text x="100" y="18" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="12" font-weight="600" font-family="Inter">N</text>
+                            <text x="185" y="105" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter">E</text>
+                            <text x="100" y="195" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter">S</text>
+                            <text x="15" y="105" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Inter">W</text>
+                            <!-- Tick marks -->
+                            <line x1="100" y1="25" x2="100" y2="35" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+                            <line x1="175" y1="100" x2="165" y2="100" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+                            <line x1="100" y1="175" x2="100" y2="165" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+                            <line x1="25" y1="100" x2="35" y2="100" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+                            <g id="wind-needle" transform="rotate(0, 100, 100)">
+                                <polygon points="100,30 94,100 106,100" fill="url(#needleGrad)" opacity="0.9"/>
+                                <polygon points="100,170 94,100 106,100" fill="rgba(255,255,255,0.15)"/>
+                            </g>
+                            <defs><linearGradient id="needleGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f43f5e"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient></defs>
+                            <circle cx="100" cy="100" r="5" fill="#1e1b4b" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+                            <text id="wind-speed-compass" x="100" y="95" text-anchor="middle" fill="white" font-size="18" font-weight="700" font-family="Outfit">--</text>
+                            <text x="100" y="112" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="9" font-family="Inter">km/h</text>
+                        </svg>
+                    </div>
+                </section>
+
+                <!-- UV Index -->
+                <section class="detail-card glass-card">
+                    <div class="detail-label">☀️ UV INDEX</div>
+                    <div id="uv-value" class="detail-big-value">--</div>
+                    <div id="uv-label" class="detail-sub-label">--</div>
+                    <div class="uv-bar">
+                        <div class="uv-gradient-bar">
+                            <div id="uv-marker" class="uv-marker"></div>
+                        </div>
+                    </div>
+                    <p id="uv-advice" class="detail-advice">--</p>
+                </section>
+
+                <!-- Visibility -->
+                <section class="detail-card glass-card">
+                    <div class="detail-label">👁️ VISIBILITY</div>
+                    <div id="visibility-value" class="detail-big-value">--</div>
+                    <div class="detail-sub-label">km</div>
+                    <p id="visibility-desc" class="detail-advice">--</p>
+                </section>
+            </div>
+
+            <!-- Precipitation & Humidity Row -->
+            <div class="details-grid two-col">
+                <section class="detail-card glass-card">
+                    <div class="detail-label">🌧️ PRECIPITATION</div>
+                    <div id="precip-value" class="detail-big-value">0 cm</div>
+                    <div class="detail-sub-label">in last 24 hours</div>
+                    <p id="precip-desc" class="detail-advice">--</p>
+                </section>
+                <section class="detail-card glass-card">
+                    <div class="detail-label">💧 HUMIDITY</div>
+                    <div id="humidity-value" class="detail-big-value">--%</div>
+                    <div id="dewpoint-info" class="detail-sub-label">Dew point: --°</div>
+                    <p id="humidity-desc" class="detail-advice">--</p>
+                </section>
+            </div>
+
+            <!-- Sun & Moon -->
+            <section class="section-card glass-card sun-moon-section">
+                <div class="section-header">
+                    <span class="section-title">☀️ Sun & Moon</span>
+                </div>
+                <!-- Sun Arc -->
+                <div class="sun-arc-container">
+                    <svg id="sun-arc-svg" viewBox="0 0 400 220" class="sun-arc-svg">
+                        <defs>
+                            <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.2"/>
+                                <stop offset="50%" stop-color="#fbbf24" stop-opacity="1"/>
+                                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.2"/>
+                            </linearGradient>
+                            <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stop-color="#fbbf24" stop-opacity="1"/>
+                                <stop offset="60%" stop-color="#f59e0b" stop-opacity="0.4"/>
+                                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+                            </radialGradient>
+                            <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stop-color="#a5b4fc" stop-opacity="0.8"/>
+                                <stop offset="60%" stop-color="#818cf8" stop-opacity="0.3"/>
+                                <stop offset="100%" stop-color="#818cf8" stop-opacity="0"/>
+                            </radialGradient>
+                        </defs>
+                        <!-- Horizon line -->
+                        <line x1="20" y1="170" x2="380" y2="170" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="4 4"/>
+                        <!-- Sun arc path -->
+                        <path id="sun-path" d="M 30 170 Q 200 10 370 170" fill="none" stroke="url(#arcGrad)" stroke-width="2.5" stroke-dasharray="8 5"/>
+                        <!-- Sun glow -->
+                        <circle id="sun-glow" cx="30" cy="170" r="22" fill="url(#sunGlow)" opacity="0.5"/>
+                        <!-- Sun circle -->
+                        <circle id="sun-position" cx="30" cy="170" r="8" fill="#fbbf24" stroke="#fde68a" stroke-width="2">
+                            <animate attributeName="r" values="8;9;8" dur="3s" repeatCount="indefinite"/>
+                        </circle>
+                        <!-- Sunrise icon & label -->
+                        <text x="30" y="188" text-anchor="middle" fill="#fbbf24" font-size="14">☀️</text>
+                        <text id="sunrise-label" x="30" y="208" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="12" font-family="Comfortaa" font-weight="500">--:--</text>
+                        <!-- Sunset icon & label -->
+                        <text x="370" y="188" text-anchor="middle" fill="#f97316" font-size="14">🌅</text>
+                        <text id="sunset-label" x="370" y="208" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="12" font-family="Comfortaa" font-weight="500">--:--</text>
+                        <!-- Daylight duration -->
+                        <text id="daylight-label" x="200" y="60" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="14" font-family="Comfortaa" font-weight="600">--</text>
+                    </svg>
+                </div>
+                <!-- Moon Section -->
+                <div class="moon-section">
+                    <div class="moon-visual">
+                        <div id="moon-icon" class="moon-icon-large">🌙</div>
+                        <div class="moon-glow-ring"></div>
+                    </div>
+                    <div class="moon-details">
+                        <div id="moon-phase" class="moon-phase-name">--</div>
+                        <div id="moon-times" class="moon-times">--</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Temperature Chart -->
+            <section class="section-card glass-card">
+                <div class="section-header">
+                    <span class="section-title">📈 Temperature Trend</span>
+                </div>
+                <canvas id="temp-chart" class="chart-canvas" height="200"></canvas>
+            </section>
+
+            <!-- Footer -->
+            <footer class="app-footer">
+                <p class="footer-credit">Created by <strong>Chaitanya Kokate</strong></p>
+                <p class="footer-data">Data powered by OpenWeatherMap</p>
+            </footer>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
