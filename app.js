@@ -138,7 +138,7 @@ function initBg() {
     let stars = [], w, h, animFrameId, resizeTimer;
     let isVisible = !document.hidden;
     function resizeNow() {
-        w = c.width = innerWidth; h = c.height = innerHeight;
+        w = c.width = window.innerWidth; h = c.height = window.innerHeight;
         stars = Array.from({ length: 150 }, () => ({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.5 + 0.3, a: Math.random(), da: (Math.random() - 0.5) * 0.012 }));
     }
     function resize() {
@@ -160,7 +160,7 @@ function initBg() {
             draw();
         }
     });
-    addEventListener('resize', resize); resizeNow(); draw();
+    window.addEventListener('resize', resize); resizeNow(); draw();
 }
 
 function setWeatherFx(cond, windSpeed) {
@@ -290,16 +290,16 @@ function renderWeather(w, forecast, aqi) {
 
     // AQI
     try {
-    if (aqi?.list?.[0]) {
+    if (aqi?.list?.[0]?.components && aqi?.list?.[0]?.main) {
         const a = aqi.list[0];
         const info = aqiInfo(a.main.aqi);
         $('aqi-face').textContent = info.f;
-        $('aqi-number').textContent = Math.round(a.components.pm2_5);
+        $('aqi-number').textContent = Math.round(a.components.pm2_5 || 0);
         $('aqi-label').textContent = info.l;
         $('aqi-label').style.color = info.c;
         $('aqi-pollutant').textContent = 'Main Pollutant: Particulate Matter 2.5';
-        $('aqi-marker').style.left = Math.min(a.main.aqi / 5 * 100, 100) + '%';
-        const comps = [['NO₂', a.components.no2], ['O₃', a.components.o3], ['PM10', a.components.pm10], ['PM2.5', a.components.pm2_5], ['CO', Math.round(a.components.co / 100)], ['SO₂', a.components.so2]];
+        $('aqi-marker').style.left = Math.min((a.main.aqi || 1) / 5 * 100, 100) + '%';
+        const comps = [['NO₂', a.components.no2 || 0], ['O₃', a.components.o3 || 0], ['PM10', a.components.pm10 || 0], ['PM2.5', a.components.pm2_5 || 0], ['CO', Math.round((a.components.co || 0) / 100)], ['SO₂', a.components.so2 || 0]];
         $('aqi-components').innerHTML = comps.map(([l, v]) => `<div class="aqi-comp-item"><div class="aqi-comp-label">${l}</div><div class="aqi-comp-value">${Math.round(v)}</div></div>`).join('');
     } else {
         $('aqi-label').textContent = 'Unavailable';
@@ -611,62 +611,11 @@ function renderFavs() {
     $('favorites-list').innerHTML = favorites.map(f => `<div class="fav-city-card" data-lat="${f.lat}" data-lon="${f.lon}" data-name="${escapeHtml(f.name)}"><div><div class="fav-city-name">${escapeHtml(f.name)}</div></div><button class="fav-remove" data-name="${escapeHtml(f.name)}">✕</button></div>`).join('');
 }
 
-// ===== EVENTS =====
-function initEvents() {
-    // Search
-    $('search-input').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim()) { searchCity(e.target.value.trim()); e.target.value = ''; $('search-history').classList.add('hidden'); } });
-    $('search-input').addEventListener('focus', () => { renderHistory(); if (history.length) $('search-history').classList.remove('hidden'); });
-    $('search-input').addEventListener('blur', () => { setTimeout(() => { $('search-history').classList.add('hidden'); $('search-suggestions').classList.add('hidden'); }, 250); });
-
-    // Live search suggestions from custom locations and global API
-    let searchTimeout;
-    $('search-input').addEventListener('input', (e) => {
-        clearTimeout(searchTimeout);
-        const val = e.target.value.toLowerCase().trim();
-        const sugBox = $('search-suggestions');
-        if (val.length < 2) { sugBox.classList.add('hidden'); return; }
-        $('search-history').classList.add('hidden');
-        
-        searchTimeout = setTimeout(async () => {
-            let uniqueMatches = [];
-            const seen = new Set();
-            
-            // 1. Local matches
-            Object.entries(customLocations).forEach(([key, loc]) => {
-                if (key.includes(val) || loc.name.toLowerCase().includes(val)) {
-                    const lkey = locationKey(loc.name, loc.lat, loc.lon);
-                    if (!seen.has(lkey)) { seen.add(lkey); uniqueMatches.push(loc); }
-                }
-            });
-            
-            // 2. Global API matches
-            try {
-                const geo = await apiGeo(val);
-                geo.forEach(loc => {
-                    const lkey = locationKey(loc.name, loc.lat, loc.lon);
-                    if (!seen.has(lkey)) {
-                        seen.add(lkey);
-                        uniqueMatches.push(loc);
-                    }
-                });
-            } catch (err) {
-                // Ignore API errors for autocomplete
-            }
-            
-            uniqueMatches = uniqueMatches.slice(0, 8);
-            if (uniqueMatches.length === 0) { sugBox.classList.add('hidden'); return; }
-            sugBox.innerHTML = uniqueMatches.map(loc => {
-                const label = `${escapeHtml(loc.name)}${loc.state ? ', ' + escapeHtml(loc.state) : ''}${loc.country && loc.country !== 'IN' ? ', ' + escapeHtml(loc.country) : ''}`;
-                return `<div class="suggestion-item" data-lat="${loc.lat}" data-lon="${loc.lon}" data-name="${escapeHtml(loc.name)}">📍 ${label}</div>`;
-            }).join('');
-            sugBox.classList.remove('hidden');
-        }, 300);
-    });
-
 // ===== GEO =====
 const handleGeoRequest = (isInlineRetry = false, isInitialLoad = false) => {
     if (!navigator.geolocation) {
         showToast('📍 Geolocation is not supported by your browser.');
+        if (isInitialLoad) searchCity('Mumbai');
         return;
     }
     let geoResolved = false;
@@ -728,6 +677,51 @@ function initEvents() {
     $('search-input').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim()) { searchCity(e.target.value.trim()); e.target.value = ''; $('search-history').classList.add('hidden'); } });
     $('search-input').addEventListener('focus', () => { renderHistory(); if (history.length) $('search-history').classList.remove('hidden'); });
     $('search-input').addEventListener('blur', () => { setTimeout(() => { $('search-history').classList.add('hidden'); $('search-suggestions').classList.add('hidden'); }, 250); });
+
+    // Live search suggestions from custom locations and global API
+    let searchTimeout;
+    $('search-input').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const val = e.target.value.toLowerCase().trim();
+        const sugBox = $('search-suggestions');
+        if (val.length < 2) { sugBox.classList.add('hidden'); return; }
+        $('search-history').classList.add('hidden');
+        
+        searchTimeout = setTimeout(async () => {
+            let uniqueMatches = [];
+            const seen = new Set();
+            
+            // 1. Local matches
+            Object.entries(customLocations).forEach(([key, loc]) => {
+                if (key.includes(val) || loc.name.toLowerCase().includes(val)) {
+                    const lkey = locationKey(loc.name, loc.lat, loc.lon);
+                    if (!seen.has(lkey)) { seen.add(lkey); uniqueMatches.push(loc); }
+                }
+            });
+            
+            // 2. Global API matches
+            try {
+                const geo = await apiGeo(val);
+                geo.forEach(loc => {
+                    const lkey = locationKey(loc.name, loc.lat, loc.lon);
+                    if (!seen.has(lkey)) {
+                        seen.add(lkey);
+                        uniqueMatches.push(loc);
+                    }
+                });
+            } catch (err) {
+                // Ignore API errors for autocomplete
+            }
+            
+            uniqueMatches = uniqueMatches.slice(0, 8);
+            if (uniqueMatches.length === 0) { sugBox.classList.add('hidden'); return; }
+            sugBox.innerHTML = uniqueMatches.map(loc => {
+                const label = `${escapeHtml(loc.name)}${loc.state ? ', ' + escapeHtml(loc.state) : ''}${loc.country && loc.country !== 'IN' ? ', ' + escapeHtml(loc.country) : ''}`;
+                return `<div class="suggestion-item" data-lat="${loc.lat}" data-lon="${loc.lon}" data-name="${escapeHtml(loc.name)}">📍 ${label}</div>`;
+            }).join('');
+            sugBox.classList.remove('hidden');
+        }, 300);
+    });
 
     // Suggestion clicks
     $('search-suggestions').addEventListener('click', e => {

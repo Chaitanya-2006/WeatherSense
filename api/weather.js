@@ -18,15 +18,15 @@ export default async function handler(req, res) {
 
   switch (type) {
     case 'current':
-      if (!lat || !lon || !isValidLat(lat) || !isValidLon(lon)) return res.status(400).json({ error: "Invalid or missing lat/lon for current weather" });
+      if (lat === undefined || lon === undefined || !isValidLat(lat) || !isValidLon(lon)) return res.status(400).json({ error: "Invalid or missing lat/lon for current weather" });
       url = `${BASE}/data/2.5/weather?lat=${lat}&lon=${lon}&units=${units || 'metric'}&appid=${apiKey}`;
       break;
     case 'forecast':
-      if (!lat || !lon || !isValidLat(lat) || !isValidLon(lon)) return res.status(400).json({ error: "Invalid or missing lat/lon for forecast" });
+      if (lat === undefined || lon === undefined || !isValidLat(lat) || !isValidLon(lon)) return res.status(400).json({ error: "Invalid or missing lat/lon for forecast" });
       url = `${BASE}/data/2.5/forecast?lat=${lat}&lon=${lon}&units=${units || 'metric'}&appid=${apiKey}`;
       break;
     case 'aqi':
-      if (!lat || !lon || !isValidLat(lat) || !isValidLon(lon)) return res.status(400).json({ error: "Invalid or missing lat/lon for aqi" });
+      if (lat === undefined || lon === undefined || !isValidLat(lat) || !isValidLon(lon)) return res.status(400).json({ error: "Invalid or missing lat/lon for aqi" });
       url = `${BASE}/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${apiKey}`;
       break;
     case 'geo':
