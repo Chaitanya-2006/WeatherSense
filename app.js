@@ -3,7 +3,19 @@ let units = 'metric';
 let currentLat, currentLon, currentCity;
 let favorites = JSON.parse(localStorage.getItem('favs') || '[]');
 let history = JSON.parse(localStorage.getItem('hist') || '[]');
+let usingFallbackLocation = false;
+let loadRequestId = 0;
+let lastW = null, lastF = null, lastA = null;
 
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+
+function locationKey(name, lat, lon) {
+    return `${name.toLowerCase()}|${parseFloat(lat).toFixed(2)}|${parseFloat(lon).toFixed(2)}`;
+}
 // Weather background images
 const weatherBGs = {
     sunny: 'images/sunny.png',
@@ -74,8 +86,8 @@ async function fetchJSON(url) {
     }
     return r.json();
 }
-const apiWeather = (lat, lon) => fetchJSON(`/api/weather?type=current&lat=${lat}&lon=${lon}&units=${units}`);
-const apiForecast = (lat, lon) => fetchJSON(`/api/weather?type=forecast&lat=${lat}&lon=${lon}&units=${units}`);
+const apiWeather = (lat, lon) => fetchJSON(`/api/weather?type=current&lat=${lat}&lon=${lon}&units=metric`);
+const apiForecast = (lat, lon) => fetchJSON(`/api/weather?type=forecast&lat=${lat}&lon=${lon}&units=metric`);
 const apiAQI = (lat, lon) => fetchJSON(`/api/weather?type=aqi&lat=${lat}&lon=${lon}`);
 const apiGeo = (city) => fetchJSON(`/api/weather?type=geo&q=${encodeURIComponent(city)}`);
 const iconUrl = (c, s = 2) => `https://openweathermap.org/img/wn/${c}@${s}x.png`;
@@ -115,6 +127,8 @@ function moonPhase() {
     const i = Math.floor(p * 8) % 8;
     return { icon: icons[i], name: names[i] };
 }
+function cToF(c) { return c * 9/5 + 32; }
+function kmhToMph(kmh) { return kmh / 1.609; }
 
 // ===== BACKGROUND ANIMATION =====
 function initBg() {
@@ -214,7 +228,9 @@ function renderWeather(w, forecast, aqi) {
     const displayName = customCityName || currentCity || w.name;
     $('city-name').textContent = displayName;
     if ($('inline-location-btn')) {
-        $('inline-location-btn').classList.add('hidden');
+        if (!usingFallbackLocation) {
+            $('inline-location-btn').classList.add('hidden');
+        }
         $('inline-location-btn').querySelector('.inline-loc-text').textContent = 'Turn on location';
     }
     currentCity = displayName;
@@ -222,17 +238,19 @@ function renderWeather(w, forecast, aqi) {
     customCityName = null; // Reset after use
 
     // Main card
-    $('current-temp-value').textContent = Math.round(w.main.temp);
-    $('realfeel-temp').textContent = Math.round(w.main.feels_like);
+    const formatTemp = t => units === 'metric' ? Math.round(t) : Math.round(cToF(t));
+    $('current-temp-value').textContent = formatTemp(w.main.temp);
+    $('realfeel-temp').textContent = formatTemp(w.main.feels_like);
     $('temp-unit-label').textContent = units === 'metric' ? 'C' : 'F';
     $('weather-condition').textContent = w.weather[0].main;
-    $('low-temp').textContent = Math.round(w.main.temp_min);
-    $('high-temp').textContent = Math.round(w.main.temp_max);
+    $('low-temp').textContent = formatTemp(w.main.temp_min);
+    $('high-temp').textContent = formatTemp(w.main.temp_max);
     $('wind-dir').textContent = (w.wind.deg != null) ? windDir(w.wind.deg) : 'Calm';
-    const spd = units === 'metric' ? (w.wind.speed * 3.6).toFixed(1) + 'km/h' : w.wind.speed.toFixed(1) + 'mph';
+    const windSpeedKmh = w.wind.speed * 3.6;
+    const spd = units === 'metric' ? windSpeedKmh.toFixed(1) + 'km/h' : kmhToMph(windSpeedKmh).toFixed(1) + 'mph';
     $('wind-speed').textContent = spd;
     $('humidity-main').textContent = w.main.humidity;
-    $('weather-icon-main').innerHTML = `<img src="${iconUrl(w.weather[0].icon, 4)}" alt="${w.weather[0].description}">`;
+    $('weather-icon-main').innerHTML = `<img src="${iconUrl(w.weather[0].icon, 4)}" alt="${escapeHtml(w.weather[0].description)}">`;
 
     // Precipitation message
     const pop = forecast.list[0]?.pop || 0;
@@ -245,7 +263,7 @@ function renderWeather(w, forecast, aqi) {
     const hrs = forecast.list.slice(0, 8);
     $('hourly-scroll').innerHTML = hrs.map((h, i) => {
         const t = fmtHour(h.dt, tz);
-        return `<div class="hourly-item${i === 0 ? ' now' : ''}"><div class="hourly-time">${i === 0 ? 'Now' : t}</div><div class="hourly-icon"><img src="${iconUrl(h.weather[0].icon)}" alt=""></div><div class="hourly-temp">${Math.round(h.main.temp)}°</div></div>`;
+        return `<div class="hourly-item${i === 0 ? ' now' : ''}"><div class="hourly-time">${i === 0 ? 'Now' : t}</div><div class="hourly-icon"><img src="${iconUrl(h.weather[0].icon)}" alt=""></div><div class="hourly-temp">${formatTemp(h.main.temp)}°</div></div>`;
     }).join('');
 
     // Daily - group forecast by day
@@ -262,12 +280,12 @@ function renderWeather(w, forecast, aqi) {
     const days = Object.values(dayMap).slice(0, 7);
     $('daily-summary').textContent = days.length > 0 ? `Forecast for the next ${days.length} days` : '';
     $('daily-list').innerHTML = days.map((d, i) => {
-        const hi = Math.round(Math.max(...d.temps));
-        const lo = Math.round(Math.min(...d.temps));
+        const hi = formatTemp(Math.max(...d.temps));
+        const lo = formatTemp(Math.min(...d.temps));
         const pop = Math.round(Math.max(...d.pops) * 100);
         const midIcon = d.icons[Math.floor(d.icons.length / 2)];
         const cond = d.conditions[Math.floor(d.conditions.length / 2)];
-        return `<div class="daily-item"><div class="daily-date"><span>${d.date}</span><strong>${i === 0 ? 'Today' : d.day}</strong></div><div class="daily-precip">${pop > 0 ? pop + '%' : ''}</div><div class="daily-icon"><img src="${iconUrl(midIcon)}" alt=""></div><div class="daily-condition">${cond}</div><div class="daily-temps"><span class="daily-hi">${hi}°</span>/<span class="daily-lo">${lo}°</span></div></div>`;
+        return `<div class="daily-item"><div class="daily-date"><span>${d.date}</span><strong>${i === 0 ? 'Today' : d.day}</strong></div><div class="daily-precip">${pop > 0 ? pop + '%' : ''}</div><div class="daily-icon"><img src="${iconUrl(midIcon)}" alt=""></div><div class="daily-condition">${escapeHtml(cond)}</div><div class="daily-temps"><span class="daily-hi">${hi}°</span>/<span class="daily-lo">${lo}°</span></div></div>`;
     }).join('');
 
     // AQI
@@ -332,7 +350,7 @@ function renderWeather(w, forecast, aqi) {
     $('precip-desc').textContent = rain > 0 ? 'Precipitation detected' : 'No precipitation expected for the next few days.';
     $('humidity-value').textContent = w.main.humidity + '%';
     const dewpoint = Math.round(w.main.temp - ((100 - w.main.humidity) / 5));
-    $('dewpoint-info').textContent = `The dew point is ${dewpoint}°`;
+    $('dewpoint-info').textContent = `The dew point is ${formatTemp(dewpoint)}°`;
     $('humidity-desc').textContent = w.main.humidity < 30 ? 'Air is dry. Stay hydrated.' : w.main.humidity < 60 ? 'Comfortable humidity.' : 'Feels humid and sticky.';
 
     // Sun & Moon
@@ -380,10 +398,13 @@ function renderChart(forecast, tz) {
     ctx.scale(dpr, dpr);
     const W = rect.width, H = 180;
 
-    const data = forecast.list.slice(0, 8).map(h => ({
-        temp: Math.round(h.main.temp),
-        label: fmtHour(h.dt, tz)
-    }));
+    const data = forecast.list.slice(0, 8).map(h => {
+        const t = units === 'metric' ? h.main.temp : cToF(h.main.temp);
+        return {
+            temp: Math.round(t),
+            label: fmtHour(h.dt, tz)
+        };
+    });
     const temps = data.map(d => d.temp);
     const minT = Math.min(...temps) - 2, maxT = Math.max(...temps) + 2;
     const padX = 30, padY = 25;
@@ -443,15 +464,19 @@ function renderChart(forecast, tz) {
 
 // ===== MAIN FETCH =====
 async function loadWeather(lat, lon) {
+    const requestId = ++loadRequestId;
     showLoading();
     hideError();
     try {
         const [w, f, a] = await Promise.all([apiWeather(lat, lon), apiForecast(lat, lon), apiAQI(lat, lon)]);
+        if (requestId !== loadRequestId) return;
+        lastW = w; lastF = f; lastA = a;
         currentLat = lat;
         currentLon = lon;
         renderWeather(w, f, a);
         showApp();
     } catch (e) {
+        if (requestId !== loadRequestId) return;
         console.error(e);
         showError('Weather Error', 'Could not fetch weather data. Please try again.');
     }
@@ -469,7 +494,7 @@ async function searchCity(name) {
         if (customLocations[searchKey]) {
             const loc = customLocations[searchKey];
             customCityName = loc.name; // Override the displayed name
-            addHistory(loc.name);
+            addHistory(loc.name, loc.lat, loc.lon);
             await loadWeather(loc.lat, loc.lon);
             return;
         }
@@ -484,20 +509,40 @@ async function searchCity(name) {
             if (partialMatch) {
                 const loc = customLocations[partialMatch];
                 customCityName = loc.name;
-                addHistory(loc.name);
+                addHistory(loc.name, loc.lat, loc.lon);
                 await loadWeather(loc.lat, loc.lon);
                 return;
             }
             showError('City Not Found', `"${name}" was not found. Check spelling and try again.`);
             return;
         }
+        if (geo.length > 1) {
+            showCityPicker(geo);
+            return;
+        }
         customCityName = null; // Use API name
         currentCity = null; // Reset so renderWeather uses API name
-        addHistory(name);
+        addHistory(name, geo[0].lat, geo[0].lon);
         await loadWeather(geo[0].lat, geo[0].lon);
     } catch (e) {
         showError('Search Error', 'Something went wrong. Please try again.');
     }
+}
+
+function showCityPicker(geo) {
+    const sugBox = $('search-suggestions');
+    const unique = [];
+    const seen = new Set();
+    geo.forEach(r => {
+        const key = locationKey(r.name, r.lat, r.lon);
+        if (!seen.has(key)) { seen.add(key); unique.push(r); }
+    });
+    sugBox.innerHTML = unique.map(loc => {
+        const label = `${escapeHtml(loc.name)}${loc.state ? ', ' + escapeHtml(loc.state) : ''}, ${escapeHtml(loc.country)}`;
+        return `<div class="suggestion-item" data-lat="${loc.lat}" data-lon="${loc.lon}" data-name="${escapeHtml(loc.name)}">📍 ${label}</div>`;
+    }).join('');
+    sugBox.classList.remove('hidden');
+    $('search-history').classList.add('hidden');
 }
 
 // ===== UI HELPERS =====
@@ -523,16 +568,31 @@ function showToast(message, duration = 5000) {
 }
 
 // ===== HISTORY =====
-function addHistory(city) { history = history.filter(c => c.toLowerCase() !== city.toLowerCase()); history.unshift(city); history = history.slice(0, 10); localStorage.setItem('hist', JSON.stringify(history)); }
+function addHistory(name, lat, lon) {
+    const key = locationKey(name, lat, lon);
+    history = history.filter(c => {
+        if (typeof c === 'string') return c.toLowerCase() !== name.toLowerCase();
+        return locationKey(c.name, c.lat, c.lon) !== key;
+    });
+    history.unshift({ name, lat, lon });
+    history = history.slice(0, 10);
+    localStorage.setItem('hist', JSON.stringify(history));
+}
 function renderHistory() {
     if (!history.length) { $('search-history').classList.add('hidden'); return; }
-    $('history-list').innerHTML = history.map(c => `<div class="history-item" data-city="${c}">🕐 ${c}</div>`).join('');
+    $('history-list').innerHTML = history.map(c => {
+        const name = typeof c === 'string' ? c : c.name;
+        const lat = typeof c === 'string' ? '' : `data-lat="${c.lat}"`;
+        const lon = typeof c === 'string' ? '' : `data-lon="${c.lon}"`;
+        return `<div class="history-item" data-city="${escapeHtml(name)}" ${lat} ${lon}>🕐 ${escapeHtml(name)}</div>`;
+    }).join('');
 }
 
 // ===== FAVORITES =====
 function toggleFav() {
     if (!currentCity) return;
-    const idx = favorites.findIndex(f => f.name === currentCity);
+    const key = locationKey(currentCity, currentLat, currentLon);
+    const idx = favorites.findIndex(f => locationKey(f.name, f.lat, f.lon) === key);
     if (idx >= 0) favorites.splice(idx, 1);
     else favorites.push({ name: currentCity, lat: currentLat, lon: currentLon });
     localStorage.setItem('favs', JSON.stringify(favorites));
@@ -542,12 +602,13 @@ function toggleFav() {
 function updateFavBtn() {
     const btn = $('fav-btn');
     if (!btn) return;
-    const isFav = favorites.some(f => f.name === currentCity);
+    const key = locationKey(currentCity, currentLat, currentLon);
+    const isFav = favorites.some(f => locationKey(f.name, f.lat, f.lon) === key);
     btn.classList.toggle('active', isFav);
 }
 function renderFavs() {
     if (!favorites.length) { $('favorites-list').innerHTML = '<p class="empty-msg">No favorite cities yet.<br>Tap ♥ to add one!</p>'; return; }
-    $('favorites-list').innerHTML = favorites.map(f => `<div class="fav-city-card" data-lat="${f.lat}" data-lon="${f.lon}" data-name="${f.name}"><div><div class="fav-city-name">${f.name}</div></div><button class="fav-remove" data-name="${f.name}">✕</button></div>`).join('');
+    $('favorites-list').innerHTML = favorites.map(f => `<div class="fav-city-card" data-lat="${f.lat}" data-lon="${f.lon}" data-name="${escapeHtml(f.name)}"><div><div class="fav-city-name">${escapeHtml(f.name)}</div></div><button class="fav-remove" data-name="${escapeHtml(f.name)}">✕</button></div>`).join('');
 }
 
 // ===== EVENTS =====
@@ -557,31 +618,123 @@ function initEvents() {
     $('search-input').addEventListener('focus', () => { renderHistory(); if (history.length) $('search-history').classList.remove('hidden'); });
     $('search-input').addEventListener('blur', () => { setTimeout(() => { $('search-history').classList.add('hidden'); $('search-suggestions').classList.add('hidden'); }, 250); });
 
-    // Live search suggestions from custom locations
+    // Live search suggestions from custom locations and global API
+    let searchTimeout;
     $('search-input').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
         const val = e.target.value.toLowerCase().trim();
         const sugBox = $('search-suggestions');
         if (val.length < 2) { sugBox.classList.add('hidden'); return; }
         $('search-history').classList.add('hidden');
-        const matches = Object.entries(customLocations)
-            .filter(([key, loc]) => key.includes(val) || loc.name.toLowerCase().includes(val))
-            .slice(0, 8)
-            .map(([key, loc]) => loc);
-        // Remove duplicates by name
-        const unique = [...new Map(matches.map(m => [m.name, m])).values()];
-        if (unique.length === 0) { sugBox.classList.add('hidden'); return; }
-        sugBox.innerHTML = unique.map(loc =>
-            `<div class="suggestion-item" data-lat="${loc.lat}" data-lon="${loc.lon}" data-name="${loc.name}">📍 ${loc.name}</div>`
-        ).join('');
-        sugBox.classList.remove('hidden');
+        
+        searchTimeout = setTimeout(async () => {
+            let uniqueMatches = [];
+            const seen = new Set();
+            
+            // 1. Local matches
+            Object.entries(customLocations).forEach(([key, loc]) => {
+                if (key.includes(val) || loc.name.toLowerCase().includes(val)) {
+                    const lkey = locationKey(loc.name, loc.lat, loc.lon);
+                    if (!seen.has(lkey)) { seen.add(lkey); uniqueMatches.push(loc); }
+                }
+            });
+            
+            // 2. Global API matches
+            try {
+                const geo = await apiGeo(val);
+                geo.forEach(loc => {
+                    const lkey = locationKey(loc.name, loc.lat, loc.lon);
+                    if (!seen.has(lkey)) {
+                        seen.add(lkey);
+                        uniqueMatches.push(loc);
+                    }
+                });
+            } catch (err) {
+                // Ignore API errors for autocomplete
+            }
+            
+            uniqueMatches = uniqueMatches.slice(0, 8);
+            if (uniqueMatches.length === 0) { sugBox.classList.add('hidden'); return; }
+            sugBox.innerHTML = uniqueMatches.map(loc => {
+                const label = `${escapeHtml(loc.name)}${loc.state ? ', ' + escapeHtml(loc.state) : ''}${loc.country && loc.country !== 'IN' ? ', ' + escapeHtml(loc.country) : ''}`;
+                return `<div class="suggestion-item" data-lat="${loc.lat}" data-lon="${loc.lon}" data-name="${escapeHtml(loc.name)}">📍 ${label}</div>`;
+            }).join('');
+            sugBox.classList.remove('hidden');
+        }, 300);
     });
+
+// ===== GEO =====
+const handleGeoRequest = (isInlineRetry = false, isInitialLoad = false) => {
+    if (!navigator.geolocation) {
+        showToast('📍 Geolocation is not supported by your browser.');
+        return;
+    }
+    let geoResolved = false;
+    const geoOptions = { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 };
+    const inlineBtn = $('inline-location-btn');
+    
+    if (isInlineRetry && inlineBtn) {
+        inlineBtn.disabled = true;
+        inlineBtn.querySelector('.inline-loc-text').textContent = 'Detecting...';
+    }
+    
+    const geoFallback = (err) => {
+        if (geoResolved) return;
+        geoResolved = true;
+        usingFallbackLocation = true;
+        if (isInlineRetry && inlineBtn) {
+            inlineBtn.disabled = false;
+            if (err && err.code === 1 /* PERMISSION_DENIED */) {
+                inlineBtn.querySelector('.inline-loc-text').textContent = 'Enable in browser settings';
+                showToast('📍 Location permission blocked. Enable it from your browser\'s site settings, then tap again.');
+            } else {
+                inlineBtn.querySelector('.inline-loc-text').textContent = 'Failed. Try again?';
+            }
+        } else if (isInitialLoad) {
+            if (inlineBtn) {
+                inlineBtn.classList.remove('hidden');
+                const currentText = inlineBtn.querySelector('.inline-loc-text').textContent;
+                if (currentText !== 'Enable in browser settings') {
+                    inlineBtn.querySelector('.inline-loc-text').textContent = 'Turn on location';
+                }
+            }
+            searchCity('Mumbai');
+        } else {
+            showToast('📍 Could not detect location. Enable location services or search manually.');
+        }
+    };
+    
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            if (geoResolved) return;
+            geoResolved = true;
+            usingFallbackLocation = false;
+            if (isInlineRetry && inlineBtn) {
+                inlineBtn.disabled = false;
+            }
+            customCityName = null;
+            currentCity = null;
+            loadWeather(pos.coords.latitude, pos.coords.longitude);
+        },
+        geoFallback,
+        geoOptions
+    );
+    setTimeout(() => geoFallback(null), 8500);
+};
+
+// ===== EVENTS =====
+function initEvents() {
+    // Search
+    $('search-input').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim()) { searchCity(e.target.value.trim()); e.target.value = ''; $('search-history').classList.add('hidden'); } });
+    $('search-input').addEventListener('focus', () => { renderHistory(); if (history.length) $('search-history').classList.remove('hidden'); });
+    $('search-input').addEventListener('blur', () => { setTimeout(() => { $('search-history').classList.add('hidden'); $('search-suggestions').classList.add('hidden'); }, 250); });
 
     // Suggestion clicks
     $('search-suggestions').addEventListener('click', e => {
         const item = e.target.closest('.suggestion-item');
         if (item) {
             customCityName = item.dataset.name;
-            addHistory(item.dataset.name);
+            addHistory(item.dataset.name, parseFloat(item.dataset.lat), parseFloat(item.dataset.lon));
             $('search-input').value = '';
             $('search-suggestions').classList.add('hidden');
             loadWeather(parseFloat(item.dataset.lat), parseFloat(item.dataset.lon));
@@ -589,67 +742,36 @@ function initEvents() {
     });
 
     // History clicks
-    $('history-list').addEventListener('click', e => { const item = e.target.closest('.history-item'); if (item) { searchCity(item.dataset.city); $('search-input').value = ''; } });
+    $('history-list').addEventListener('click', e => {
+        const item = e.target.closest('.history-item');
+        if (item) {
+            if (item.dataset.lat && item.dataset.lon) {
+                customCityName = item.dataset.city;
+                loadWeather(parseFloat(item.dataset.lat), parseFloat(item.dataset.lon));
+            } else {
+                searchCity(item.dataset.city);
+            }
+            $('search-input').value = '';
+            $('search-history').classList.add('hidden');
+        }
+    });
     $('clear-history-btn').addEventListener('click', () => { history = []; localStorage.setItem('hist', '[]'); $('search-history').classList.add('hidden'); });
 
     // Location buttons
-    const handleGeoRequest = (isInlineRetry = false) => {
-        if (!navigator.geolocation) {
-            showToast('📍 Geolocation is not supported by your browser.');
-            return;
-        }
-        let geoResolved = false;
-        const geoOptions = { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 };
-        const inlineBtn = $('inline-location-btn');
-        
-        if (isInlineRetry && inlineBtn) {
-            inlineBtn.disabled = true;
-            inlineBtn.querySelector('.inline-loc-text').textContent = 'Detecting...';
-        }
-        
-        const geoFallback = (err) => {
-            if (geoResolved) return;
-            geoResolved = true;
-            if (isInlineRetry && inlineBtn) {
-                inlineBtn.disabled = false;
-                if (err && err.code === 1 /* PERMISSION_DENIED */) {
-                    inlineBtn.querySelector('.inline-loc-text').textContent = 'Enable in browser settings';
-                    showToast('📍 Location permission blocked. Enable it from your browser\'s site settings, then tap again.');
-                } else {
-                    inlineBtn.querySelector('.inline-loc-text').textContent = 'Failed. Try again?';
-                }
-            } else if (!isInlineRetry) {
-                showToast('📍 Could not detect location. Enable location services or search manually.');
-            }
-        };
-        
-        navigator.geolocation.getCurrentPosition(
-            pos => {
-                if (geoResolved) return;
-                geoResolved = true;
-                if (isInlineRetry && inlineBtn) {
-                    inlineBtn.disabled = false;
-                }
-                customCityName = null;
-                currentCity = null;
-                loadWeather(pos.coords.latitude, pos.coords.longitude);
-            },
-            geoFallback,
-            geoOptions
-        );
-        setTimeout(() => geoFallback(null), 8500);
-    };
-
-    $('location-btn').addEventListener('click', () => handleGeoRequest(false));
+    $('location-btn').addEventListener('click', () => handleGeoRequest(false, false));
     if ($('inline-location-btn')) {
-        $('inline-location-btn').addEventListener('click', () => handleGeoRequest(true));
+        $('inline-location-btn').addEventListener('click', () => handleGeoRequest(true, false));
     }
 
     // Unit toggle
     $('unit-toggle').addEventListener('click', () => {
         units = units === 'metric' ? 'imperial' : 'metric';
         $('unit-toggle').textContent = units === 'metric' ? '°C' : '°F';
-        if (currentLat) loadWeather(currentLat, currentLon);
+        if (lastW && lastF) {
+            renderWeather(lastW, lastF, lastA);
+        } else if (currentLat) {
+            loadWeather(currentLat, currentLon);
+        }
     });
 
     // Favorites sidebar
@@ -659,7 +781,7 @@ function initEvents() {
     $('favorites-list').addEventListener('click', e => {
         const card = e.target.closest('.fav-city-card');
         const rm = e.target.closest('.fav-remove');
-        if (rm) { favorites = favorites.filter(f => f.name !== rm.dataset.name); localStorage.setItem('favs', JSON.stringify(favorites)); renderFavs(); return; }
+        if (rm) { favorites = favorites.filter(f => locationKey(f.name, f.lat, f.lon) !== locationKey(rm.dataset.name, rm.closest('.fav-city-card').dataset.lat, rm.closest('.fav-city-card').dataset.lon)); localStorage.setItem('favs', JSON.stringify(favorites)); renderFavs(); return; }
         if (card) { customCityName = card.dataset.name || null; loadWeather(parseFloat(card.dataset.lat), parseFloat(card.dataset.lon)); closeSidebar(); }
     });
 
@@ -671,7 +793,7 @@ function initEvents() {
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) { alert('Voice search not supported in this browser.'); return; }
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         const rec = new SR();
-        rec.lang = 'en-US';
+        rec.lang = navigator.language || 'en-US';
         rec.onresult = e => { const t = e.results[0][0].transcript; $('search-input').value = t; searchCity(t); };
         rec.onerror = () => $('voice-btn').classList.remove('listening');
         rec.onend = () => $('voice-btn').classList.remove('listening');
@@ -703,36 +825,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }).catch(() => {});
     }
 
-    // Try geolocation first, fallback to default city
     if (navigator.geolocation) {
-        let geoResolved = false;
-        const geoOptions = { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 };
-        const geoFallback = () => {
-            if (geoResolved) return;
-            geoResolved = true;
-            if ($('inline-location-btn')) {
-                $('inline-location-btn').classList.remove('hidden');
-                // Don't override label if Permissions API already set it to 'Enable in browser settings'
-                const currentText = $('inline-location-btn').querySelector('.inline-loc-text').textContent;
-                if (currentText !== 'Enable in browser settings') {
-                    $('inline-location-btn').querySelector('.inline-loc-text').textContent = 'Turn on location';
-                }
-            }
-            searchCity('Mumbai');
-        };
-        navigator.geolocation.getCurrentPosition(
-            pos => {
-                if (geoResolved) return;
-                geoResolved = true;
-                customCityName = null;
-                currentCity = null;
-                loadWeather(pos.coords.latitude, pos.coords.longitude);
-            },
-            geoFallback,
-            geoOptions
-        );
-        // Safety net: if neither callback fires within 8.5s
-        setTimeout(geoFallback, 8500);
+        handleGeoRequest(false, true);
     } else {
         searchCity('Mumbai');
     }
